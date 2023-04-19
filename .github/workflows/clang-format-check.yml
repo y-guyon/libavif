@@ -1,4 +1,4 @@
-name: CI
+name: CI-Clang-format-check
 on: [push]
 
 permissions:

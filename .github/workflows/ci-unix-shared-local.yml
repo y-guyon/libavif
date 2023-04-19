@@ -3,7 +3,7 @@
 #   * The os matrix consists of ubuntu-latest only.
 #   * Does not build rav1e, SVT-AV1 nor libgav1.
 
-name: CI
+name: CI-Unix-shared-local
 on: [push, pull_request]
 
 permissions:

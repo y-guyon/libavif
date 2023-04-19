@@ -10,7 +10,7 @@
 #   * Builds with local libjpeg (-DAVIF_LOCAL_JPEG=ON).
 #   * Builds with local zlib and libpng (-DAVIF_LOCAL_ZLIBPNG=ON).
 
-name: CI
+name: CI-Windows-static
 on: [push, pull_request]
 
 permissions:
