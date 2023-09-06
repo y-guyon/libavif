@@ -38,3 +38,7 @@ include(AndroidNdkModules)
 android_ndk_import_module_cpufeatures()
 
 target_link_libraries(avif_android jnigraphics avif log cpufeatures)
+
+# Temporary fix for unused parameter errors.
+# See https://github.com/AOMediaCodec/libavif/pull/1534#discussion_r1316962599
+target_compile_options(avif_android PRIVATE "-Wno-unused-parameter")
