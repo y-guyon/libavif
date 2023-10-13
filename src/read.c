@@ -837,6 +837,7 @@ typedef struct avifDecoderData
                                                //   The colour information property takes precedence over any colour information
                                                //   in the image bitstream, i.e. if the property is present, colour information in
                                                //   the bitstream shall be ignored.
+    avifBool fullRangeFlagSet;                 // True if a "colr" box of colour_type "nclx" has been seen.
 } avifDecoderData;
 
 static void avifDecoderDataDestroy(avifDecoderData * data);
@@ -1469,8 +1470,8 @@ static avifResult avifDecoderDataAllocateGridImagePlanes(avifDecoderData * data,
     }
 
     // Lazily populate dstImage with the new frame's properties.
-    if ((dstImage->width != grid->outputWidth) || (dstImage->height != grid->outputHeight) ||
-        (dstImage->depth != tile->image->depth) || (!alpha && (dstImage->yuvFormat != tile->image->yuvFormat))) {
+    if ((dstImage->width != grid->outputWidth) || (dstImage->height != grid->outputHeight) || (dstImage->depth != tile->image->depth) ||
+        (!alpha && (dstImage->yuvFormat != tile->image->yuvFormat)) || (!alpha && (dstImage->yuvRange != tile->image->yuvRange))) {
         if (alpha) {
             // Alpha doesn't match size, just bail out
             avifDiagnosticsPrintf(data->diag, "Alpha plane dimensions do not match color plane dimensions");
@@ -4469,6 +4470,7 @@ avifResult avifDecoderReset(avifDecoder * decoder)
     AVIF_CHECKERR(decoder->image, AVIF_RESULT_OUT_OF_MEMORY);
     decoder->progressiveState = AVIF_PROGRESSIVE_STATE_UNAVAILABLE;
     data->cicpSet = AVIF_FALSE;
+    data->fullRangeFlagSet = AVIF_FALSE;
 
     memset(&decoder->ioStats, 0, sizeof(decoder->ioStats));
 
@@ -4821,6 +4823,7 @@ avifResult avifDecoderReset(avifDecoder * decoder)
                 }
                 colrNCLXSeen = AVIF_TRUE;
                 data->cicpSet = AVIF_TRUE;
+                data->fullRangeFlagSet = AVIF_TRUE;
                 decoder->image->colorPrimaries = prop->u.colr.colorPrimaries;
                 decoder->image->transferCharacteristics = prop->u.colr.transferCharacteristics;
                 decoder->image->matrixCoefficients = prop->u.colr.matrixCoefficients;
@@ -4982,6 +4985,15 @@ static avifResult avifDecoderDecodeTiles(avifDecoder * decoder, uint32_t nextIma
         if (!tile->codec->getNextImage(tile->codec, decoder, sample, tile->input->itemCategory == AVIF_ITEM_ALPHA, &isLimitedRangeAlpha, tile->image)) {
             avifDiagnosticsPrintf(&decoder->diag, "tile->codec->getNextImage() failed");
             return avifGetErrorForItemCategory(tile->input->itemCategory);
+        }
+
+        if (tile->input->itemCategory == AVIF_ITEM_COLOR && decoder->data->fullRangeFlagSet &&
+            tile->image->yuvRange != decoder->image->yuvRange) {
+            // According to section 2.3.4 of AV1 Codec ISO Media File Format Binding v1.2.0:
+            //   the full_range_flag in the colr box shall match the color_range flag in the Sequence Header OBU.
+            // See https://aomediacodec.github.io/av1-isobmff/v1.2.0.html#av1codecconfigurationbox-semantics.
+            avifDiagnosticsPrintf(&decoder->diag, "Full/limited video range mismatch between container and coded color item");
+            return AVIF_RESULT_BMFF_PARSE_FAILED;
         }
 
         // Alpha plane with limited range is not allowed by the latest revision
