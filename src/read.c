@@ -787,7 +787,7 @@ static void avifMetaDestroy(avifMeta * meta)
 {
     for (uint32_t i = 0; i < meta->items.count; ++i) {
         avifDecoderItem * item = meta->items.item[i];
-        avifPropertyArrayDestroy(&item->properties);
+        avifArrayDestroy(&item->properties);
         avifArrayDestroy(&item->extents);
         if (item->ownsMergedExtents) {
             avifRWDataFree(&item->mergedExtents);
@@ -2680,11 +2680,6 @@ static avifResult avifParseItemPropertyAssociation(avifMeta * meta, const uint8_
                         }
                     }
                 }
-
-                // Supported and valid; associate it with this item.
-                avifProperty * dstProp = (avifProperty *)avifArrayPush(&item->properties);
-                AVIF_CHECKERR(dstProp != NULL, AVIF_RESULT_OUT_OF_MEMORY);
-                *dstProp = *srcProp;
             } else {
                 if (essential) {
                     // Discovered an essential item property that libavif doesn't support!
@@ -2692,6 +2687,10 @@ static avifResult avifParseItemPropertyAssociation(avifMeta * meta, const uint8_
                     item->hasUnsupportedEssentialProperty = AVIF_TRUE;
                 }
             }
+            // Valid; associate it with this item.
+            avifProperty * dstProp = (avifProperty *)avifArrayPush(&item->properties);
+            AVIF_CHECKERR(dstProp != NULL, AVIF_RESULT_OUT_OF_MEMORY);
+            *dstProp = *srcProp;
         }
     }
     return AVIF_RESULT_OK;
