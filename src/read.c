@@ -1237,6 +1237,14 @@ static uint8_t avifDecoderItemOperatingPoint(const avifDecoderItem * item)
     return 0; // default
 }
 
+static avifBool avifAreCodecConfigurationBoxesEqual(const avifCodecConfigurationBox * a, const avifCodecConfigurationBox * b)
+{
+    return a->seqProfile == b->seqProfile && a->seqLevelIdx0 == b->seqLevelIdx0 && a->seqTier0 == b->seqTier0 &&
+           a->highBitdepth == b->highBitdepth && a->twelveBit == b->twelveBit && a->monochrome == b->monochrome &&
+           a->chromaSubsamplingX == b->chromaSubsamplingX && a->chromaSubsamplingY == b->chromaSubsamplingY &&
+           a->chromaSamplePosition == b->chromaSamplePosition;
+}
+
 static avifResult avifDecoderItemValidateProperties(const avifDecoderItem * item,
                                                     const char * configPropName,
                                                     avifDiagnostics * diag,
@@ -1273,15 +1281,7 @@ static avifResult avifDecoderItemValidateProperties(const avifDecoderItem * item
             }
             // configProp was copied from a tile item to the grid item. Comparing tileConfigProp with it
             // is equivalent to comparing tileConfigProp with the configPropName from the first tile.
-            if ((tileConfigProp->u.av1C.seqProfile != configProp->u.av1C.seqProfile) ||
-                (tileConfigProp->u.av1C.seqLevelIdx0 != configProp->u.av1C.seqLevelIdx0) ||
-                (tileConfigProp->u.av1C.seqTier0 != configProp->u.av1C.seqTier0) ||
-                (tileConfigProp->u.av1C.highBitdepth != configProp->u.av1C.highBitdepth) ||
-                (tileConfigProp->u.av1C.twelveBit != configProp->u.av1C.twelveBit) ||
-                (tileConfigProp->u.av1C.monochrome != configProp->u.av1C.monochrome) ||
-                (tileConfigProp->u.av1C.chromaSubsamplingX != configProp->u.av1C.chromaSubsamplingX) ||
-                (tileConfigProp->u.av1C.chromaSubsamplingY != configProp->u.av1C.chromaSubsamplingY) ||
-                (tileConfigProp->u.av1C.chromaSamplePosition != configProp->u.av1C.chromaSamplePosition)) {
+            if (!avifAreCodecConfigurationBoxesEqual(&tileConfigProp->u.av1C, &configProp->u.av1C)) {
                 avifDiagnosticsPrintf(diag,
                                       "The fields of the %s property of tile item ID %u of type '%.4s' differs from other tiles",
                                       configPropName,
@@ -1654,9 +1654,19 @@ static avifResult avifDecoderAdoptGridTileCodecType(avifDecoder * decoder,
                 avifDiagnosticsPrintf(&decoder->diag, "Grid image's first tile is missing an %s property", configPropName);
                 return AVIF_RESULT_INVALID_IMAGE_GRID;
             }
-            avifProperty * dstProp = (avifProperty *)avifArrayPush(&gridItem->properties);
-            AVIF_CHECKERR(dstProp != NULL, AVIF_RESULT_OUT_OF_MEMORY);
-            *dstProp = *srcProp;
+            const avifProperty * existingDstProp = avifPropertyArrayFind(&gridItem->properties, configPropName);
+            if (existingDstProp == NULL) {
+                // Create a "fake" property and its association.
+                avifProperty * dstProp = (avifProperty *)avifArrayPush(&gridItem->properties);
+                AVIF_CHECKERR(dstProp != NULL, AVIF_RESULT_OUT_OF_MEMORY);
+                *dstProp = *srcProp;
+            } else {
+                // Either the input file contained a codec configuration property associated with
+                // a grid item, which is unexpected, or avifDecoderReset() was already called,
+                // and the "fake" property was already created. Just check they match in both cases.
+                AVIF_CHECKERR(avifAreCodecConfigurationBoxesEqual(&srcProp->u.av1C, &existingDstProp->u.av1C),
+                              AVIF_RESULT_BMFF_PARSE_FAILED);
+            }
 
         } else if (memcmp(item->type, firstTileItem->type, 4)) {
             // MIAF (ISO 23000-22:2019), Section 7.3.11.4.1:
